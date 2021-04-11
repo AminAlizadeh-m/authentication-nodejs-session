@@ -16,6 +16,17 @@ const {
 
 const IN_PROD = process.env.NODE_ENV === 'production';
 
+// My storage (DB)
+const users = [
+    { id: 1, name: 'Amin', email: 'amin@gmail.com', password: '123' },
+    { id: 2, name: 'Foad', email: 'foad@gmail.com', password: '123' },
+    { id: 3, name: 'Iman', email: 'iman@gmail.com', password: '123' }
+];
+
+app.use(express.urlencoded({
+    extended: true
+}));
+
 app.use(session({
     name: SESS_NAME,
     // Resave : Forces the session to be saved back to the session store, even if the session was never modified during the request.
@@ -47,8 +58,123 @@ app.use(session({
     }
 }));
 
+const redirectLogin = (req, res, next) => {
+    if (!req.session.userId) {
+        res.redirect('/login');
+    } else {
+        next();
+    }
+}
+
+const redirectHome = (req, res, next) => {
+    if (req.session.userId) {
+        res.redirect('/home');
+    } else {
+        next();
+    }
+}
+
 app.get('/', (req, res) => {
-    res.send('Welcome to my app!!');
+    const { userId } = req.session;
+    console.log(userId);
+    res.send(`
+        <h1>Welcome to my app</h1>
+        ${userId ? `
+            <a href="/home">Home</a>
+            <form method='post' action='/logout'>
+                <button type='submit'>Logout</button>
+            </form>
+        ` : `
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+        `}
+    `);
+});
+
+app.get('/home', redirectLogin, (req, res) => {
+    const user = users.find(user => user.id === req.session.userId);
+    res.send(`
+        <h1>Home</h1>
+        <a href='/'>Main</a>
+        <ul>
+            <li>Name: ${user.name}</li>
+            <li>Email: ${user.email}</li>
+        </ul>
+    `);
+});
+
+app.get('/login', redirectHome, (req, res) => {
+    res.send(`
+        <h1>Login</h1>
+        <form method='post' action='/login'>
+            <input type='email' name='email' placeholder='Email' required />
+            <input type='password' name='password' placeholder='Password' required />
+            <input type='submit' />
+        </form>
+        <a href='/register'>Register</a>
+    `);
+});
+
+app.get('/register', redirectHome, (req, res) => {
+    res.send(`
+        <h1>Register</h1>
+        <form method='post' action='/register'>
+            <input type='name' name='name' placeholder='Name' required />
+            <input type='email' name='email' placeholder='Email' required />
+            <input type='password' name='password' placeholder='Password' required />
+            <input type='submit' />
+        </form>
+        <a href='/login'>Login</a>
+    `);
+});
+
+app.post('/login', redirectHome, (req, res) => {
+    const { password, email } = req.body;
+
+    if (password && email) {
+        const user = users.find(user => user.email === email && user.password === password);
+
+        if (user) {
+            req.session.userId = user.id;
+            return res.redirect('/home');
+        }
+    }
+
+    res.redirect('/login');
+});
+
+app.post('/register', redirectHome, (req, res) => {
+    const { name, email, password } = req.body;
+    if (name && email && password) {
+        const exists = users.some(user => user.email === email); // Return boolean
+
+        if (!exists) {
+            const user = {
+                id: users.length + 1,
+                name: name,
+                email: email,
+                password: password
+            };
+
+            users.push(user); 
+            
+            req.session.userId = user.id;
+            return res.redirect('/home');
+        } 
+    }
+
+    res.redirect('/register');
+});
+
+app.post('/logout', redirectLogin, (req, res) => {
+    req.session.destroy(error => {
+        if (error) {
+            return res.redirect('/home');
+        }
+
+        res.clearCookie(SESS_NAME);
+        res.redirect('/login');
+    })
 });
 
 app.listen(PORT, () => console.log(
